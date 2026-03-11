@@ -1,0 +1,23 @@
+{
+  "Input": [
+    {
+      "ItemId": "Soil_Dirt",
+      "Quantity": 8
+    }
+  ],
+  "PrimaryOutput": {
+    "ItemId": "Soil_Dirt",
+    "Quantity": 1
+  },
+  "BenchRequirement": [
+    {
+      "Id": "Fieldcraft",
+      "Type": "Crafting",
+      "Categories": [
+        "Tools"
+      ]
+    }
+  ],
+  "Seconds": 1,
+  "Comment": "Template recipe for security mod template"
+}

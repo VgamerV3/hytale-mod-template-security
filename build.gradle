@@ -1,0 +1,103 @@
+plugins {
+  id 'java'
+}
+
+ext {
+  hytaleHome = System.getenv('HYTALE_HOME') ?: "${System.getProperty('user.home')}/AppData/Roaming/Hytale"
+}
+
+def localTemplateJar = file('libs/HytaleServer.jar')
+def envConfiguredJarPath = System.getenv('HYTALE_SERVER_JAR')
+def envConfiguredJar = envConfiguredJarPath ? file(envConfiguredJarPath) : null
+def launcherJar = file("$hytaleHome/install/$patchline/package/game/latest/Server/HytaleServer.jar")
+def workspaceJar = file('../../../HytaleServer.jar')
+
+def hytaleServerJar = [localTemplateJar, envConfiguredJar, launcherJar, workspaceJar].find { it != null && it.exists() }
+
+def effectiveHytaleBuild = hytale_build
+if (hytaleServerJar != null) {
+  try {
+    def jarManifest = new java.util.jar.JarFile(hytaleServerJar).manifest
+    def detectedVersion = jarManifest?.mainAttributes?.getValue('Implementation-Version')
+    if (detectedVersion != null && !detectedVersion.isBlank()) {
+      effectiveHytaleBuild = detectedVersion
+    }
+  } catch (Exception ignored) {
+    // Keep the configured fallback if manifest lookup fails.
+  }
+}
+
+group = maven_group
+version = version
+
+java {
+  toolchain.languageVersion = JavaLanguageVersion.of((java_version as String).toInteger())
+  withSourcesJar()
+  withJavadocJar()
+}
+
+javadoc {
+  options.addStringOption('Xdoclint:-missing', '-quiet')
+}
+
+repositories {
+  mavenCentral()
+  maven {
+    name = 'hytale-release'
+    url = uri('https://maven.hytale.com/release')
+  }
+  maven {
+    name = 'hytale-pre-release'
+    url = uri('https://maven.hytale.com/pre-release')
+  }
+}
+
+dependencies {
+  if (hytaleServerJar != null) {
+    implementation files(hytaleServerJar)
+  } else {
+    implementation "com.hypixel.hytale:Server:${effectiveHytaleBuild}"
+  }
+
+  testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+}
+
+tasks.withType(JavaCompile).configureEach {
+  options.encoding = 'UTF-8'
+}
+
+tasks.test {
+  useJUnitPlatform()
+}
+
+def serverRunDir = file("$projectDir/run")
+if (!serverRunDir.exists()) {
+  serverRunDir.mkdirs()
+}
+
+tasks.register('updatePluginManifest') {
+  def manifestFile = file('src/main/resources/manifest.json')
+  doLast {
+    if (!manifestFile.exists()) {
+      throw new GradleException("Could not find manifest.json at ${manifestFile.path}!")
+    }
+    def manifestJson = new groovy.json.JsonSlurper().parseText(manifestFile.text)
+    manifestJson.Version = version
+    manifestJson.IncludesAssetPack = includes_pack.toBoolean()
+    if (manifestJson.containsKey('ServerVersion')) {
+      manifestJson.ServerVersion = effectiveHytaleBuild
+    }
+    manifestFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(manifestJson))
+  }
+}
+
+tasks.named('processResources') {
+  dependsOn 'updatePluginManifest'
+}
+
+tasks.register('printHytaleJar') {
+  doLast {
+    println "Using HytaleServer.jar: ${hytaleServerJar != null ? hytaleServerJar.absolutePath : '(maven dependency)'}"
+    println "Effective server build: ${effectiveHytaleBuild}"
+  }
+}
